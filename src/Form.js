@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { ToastContainer,toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import {
   outerStyle,
   buttonStyle,
@@ -23,6 +25,16 @@ const Form = () => {
   const location = useLocation();
   const { extractedTexts } = location.state || {};
   const [email, setEmail] = useState("");
+  const [personalInfo, setPersonalInfo] = useState({
+    name: "",
+    mobileNumber: "",
+    aadhaarNumber: "",
+    passportNumber: "",
+    dob: "",
+    gender: "",
+    address: "",
+  });
+  const [academicInfo, setAcademicInfo] = useState([]);
 
   const formatName = (name) => {
     if (!name) return "";
@@ -37,20 +49,59 @@ const Form = () => {
     return match ? match[1] : null;
   };
 
-  const ans = [];
-  ans[0] = extractDataFromAadhar(extractedTexts[0]?.text || "");
-  ans[1] = extractPassportData(JSON.stringify(extractedTexts[1]));
-  ans[2] = extractSubjectsAndMarks(JSON.stringify(extractedTexts[2]));
+  const handlePersonalInfoChange = (field, value) => {
+    setPersonalInfo((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleAcademicInfoChange = (index, field, value) => {
+    setAcademicInfo((prev) =>
+      prev.map((item, idx) =>
+        idx === index ? { ...item, [field]: value } : item
+      )
+    );
+  };
+
+  useEffect(() => {
+    document.body.style.fontFamily = 'Poppins, sans-serif';
+    const ans = [];
+    ans[0] = extractDataFromAadhar(extractedTexts?.[0]?.text || "");
+    ans[1] = extractPassportData(JSON.stringify(extractedTexts?.[1] || {}));
+    ans[2] = extractSubjectsAndMarks(JSON.stringify(extractedTexts?.[2] || {}));
+
+    setPersonalInfo((prev) => ({
+      ...prev,
+      name: formatName(ans[1].passportName) || extractName(ans[0].name) || "",
+      mobileNumber: ans[0].mobileNumber || "",
+      aadhaarNumber: ans[0].aadhaarNumber || "",
+      dob:
+        ans[0]?.dob?.length === 10
+          ? ans[0].dob
+          : ans[1].passportDOB || ans[0]?.year || "",
+      gender: ans[0].gender
+        ? ans[0].gender.charAt(0).toUpperCase() + ans[0].gender.slice(1)
+        : "",
+      address: ans[0].address || "",
+      passportNumber: ans[1].passportNumber || "",
+    }));
+    setAcademicInfo(ans[2]);
+  }, [extractedTexts]);
 
   const generatePDF = () => {
-    if (!email) {
-      alert("Please enter a valid email address.");
+    if (
+      !email ||
+      !personalInfo.name ||
+      !personalInfo.mobileNumber ||
+      !personalInfo.dob ||
+      !personalInfo.address ||
+      !personalInfo.gender ||
+      !academicInfo.length
+    ) {
+      toast.error("Please fill all the fields.");
       return;
     }
-
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(email)) {
-      alert("Please enter a valid email address.");
+      toast.error("Please enter a valid email address.");
       return;
     }
 
@@ -74,45 +125,13 @@ const Form = () => {
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(50);
-    doc.text(
-      `1. Full Name: ${
-        formatName(ans[1]?.passportName) ||
-        extractName(ans[0]?.name) ||
-        "Missing Value"
-      }`,
-      10,
-      45
-    );
-    doc.text(
-      `2. Phone Number: ${ans[0].mobileNumber || "Missing Value"}`,
-      10,
-      55
-    );
+    doc.text(`1. Full Name: ${personalInfo.name}`, 10, 45);
+    doc.text(`2. Phone Number: ${personalInfo.mobileNumber}`, 10, 55);
     doc.text(`3. Email Address: ${email}`, 10, 65);
-    doc.text(`4. Address: ${ans[0].address || "Missing Value"}`, 10, 75);
-    doc.text(
-      `5. Date of Birth: ${
-        ans[0]?.dob?.length === 10
-          ? ans[0].dob
-          : ans[1].passportDOB || ans[0]?.year || "Missing Value"
-      }`,
-      10,
-      90
-    );
-    doc.text(
-      `6. Gender: ${
-        ans[0].gender
-          ? ans[0].gender.charAt(0).toUpperCase() + ans[0].gender.slice(1)
-          : "Missing Value"
-      }`,
-      10,
-      100
-    );
-    doc.text(
-      `7. Passport Number: ${ans[1].passportNumber || "Missing Value"}`,
-      10,
-      110
-    );
+    doc.text(`4. Address: ${personalInfo.address}`, 10, 75);
+    doc.text(`5. Date of Birth: ${personalInfo.dob}`, 10, 90);
+    doc.text(`6. Gender: ${personalInfo.gender}`, 10, 100);
+    doc.text(`7. Passport Number: ${personalInfo.passportNumber}`, 10, 110);
 
     // Academic Information Section
     doc.setFontSize(16);
@@ -132,7 +151,7 @@ const Form = () => {
       headStyles: { fillColor: [0, 51, 102], textColor: [255, 255, 255] },
       alternateRowStyles: { fillColor: [240, 240, 240] },
       head: [["Subject", "Marks"]],
-      body: ans[2].map((item) => [item.subject, item.marks]),
+      body: academicInfo.map((item) => [item.subject, item.marks]),
     });
 
     doc.save("Input_Details_Form.pdf");
@@ -165,49 +184,110 @@ const Form = () => {
               <h3 style={{ color: "#003366" }}>Personal Information</h3>
               <p>
                 <strong>Name:</strong>{" "}
-                {formatName(ans[1].passportName) ||
-                  extractName(ans[0].name) ||
-                  "Missing Value"}
+                <input
+                  type="text"
+                  value={personalInfo.name}
+                  onChange={(e) =>
+                    handlePersonalInfoChange("name", e.target.value)
+                  }
+                  placeholder="Enter Name"
+                  style={inputStyle}
+                />
               </p>
               <p>
                 <strong>Date of Birth:</strong>{" "}
-                {ans[0]?.dob?.length === 10
-                  ? ans[0].dob
-                  : ans[1].passportDOB || ans[0]?.year || "Missing Value"}
+                <input
+                  type="text"
+                  value={personalInfo.dob}
+                  onChange={(e) =>
+                    handlePersonalInfoChange("dob", e.target.value)
+                  }
+                  placeholder="Enter Date of Birth"
+                  style={inputStyle}
+                />
               </p>
               <p>
                 <strong>Mobile Number:</strong>{" "}
-                {ans[0].mobileNumber || "Missing Value"}
+                <input
+                  type="text"
+                  value={personalInfo.mobileNumber}
+                  onChange={(e) =>
+                    handlePersonalInfoChange("mobileNumber", e.target.value)
+                  }
+                  placeholder="Enter Mobile Number"
+                  style={inputStyle}
+                />
               </p>
               <p>
                 <strong>Aadhaar Number:</strong>{" "}
-                {ans[0].aadhaarNumber || "Missing Value"}
+                <input
+                  type="text"
+                  value={personalInfo.aadhaarNumber}
+                  onChange={(e) =>
+                    handlePersonalInfoChange("aadhaarNumber", e.target.value)
+                  }
+                  placeholder="Enter Aadhaar Number"
+                  style={inputStyle}
+                />
               </p>
               <p>
                 <strong>Passport Number:</strong>{" "}
-                {ans[1].passportNumber || "Missing Value"}
+                <input
+                  type="text"
+                  value={personalInfo.passportNumber}
+                  onChange={(e) =>
+                    handlePersonalInfoChange("passportNumber", e.target.value)
+                  }
+                  placeholder="Enter Passport Number"
+                  style={inputStyle}
+                />
               </p>
               <div>
                 <strong>Gender:</strong>
                 <div style={{ marginTop: "10px" }}>
                   <label>
                     <input
-                      type="checkbox"
-                      checked={ans[0].gender === "male"}
-                      readOnly
-                    />{" "}
+                      type="radio"
+                      checked={personalInfo.gender === "Male"}
+                      onChange={() =>
+                        handlePersonalInfoChange("gender", "Male")
+                      }
+                    />
                     Male
                   </label>
                   <label style={{ marginLeft: "20px" }}>
                     <input
-                      type="checkbox"
-                      checked={ans[0].gender === "female"}
-                      readOnly
-                    />{" "}
+                      type="radio"
+                      checked={personalInfo.gender === "Female"}
+                      onChange={() =>
+                        handlePersonalInfoChange("gender", "Female")
+                      }
+                    />
                     Female
+                  </label>
+                  <label style={{ marginLeft: "20px" }}>
+                    <input
+                      type="radio"
+                      checked={personalInfo.gender === "Other"}
+                      onChange={() =>
+                        handlePersonalInfoChange("gender", "Other")
+                      }
+                    />
+                    Other
                   </label>
                 </div>
               </div>
+              <p>
+                <strong>Address:</strong>{" "}
+                <textarea
+                  value={personalInfo.address}
+                  onChange={(e) =>
+                    handlePersonalInfoChange("address", e.target.value)
+                  }
+                  placeholder="Enter Address"
+                  style={{ ...inputStyle, height: "60px" }}
+                />
+              </p>
             </div>
             <div style={innerGridStyle}>
               <h3 style={{ color: "#003366" }}>Academic Information</h3>
@@ -219,10 +299,38 @@ const Form = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {ans[2].map((item, index) => (
+                  {academicInfo.map((item, index) => (
                     <tr key={index}>
-                      <td style={tableDataStyle}>{item.subject}</td>
-                      <td style={tableDataStyle}>{item.marks}</td>
+                      <td style={tableDataStyle}>
+                        <input
+                          type="text"
+                          value={item.subject}
+                          onChange={(e) =>
+                            handleAcademicInfoChange(
+                              index,
+                              "subject",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Enter Subject"
+                          style={inputStyle}
+                        />
+                      </td>
+                      <td style={tableDataStyle}>
+                        <input
+                          type="number"
+                          value={item.marks}
+                          onChange={(e) =>
+                            handleAcademicInfoChange(
+                              index,
+                              "marks",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Enter Marks"
+                          style={inputStyle}
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -231,8 +339,9 @@ const Form = () => {
           </div>
         </div>
       ) : (
-        <p>No extracted data available</p>
+        <h3>Loading...</h3>
       )}
+      <ToastContainer />
     </div>
   );
 };

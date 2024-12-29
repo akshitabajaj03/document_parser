@@ -17,6 +17,7 @@
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.1",
     "react-scripts": "5.0.1",
+    "react-toastify": "^11.0.2",
     "tesseract.js": "^5.1.1"
   },
   "scripts": {
