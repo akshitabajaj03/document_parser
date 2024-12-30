@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Tesseract from "tesseract.js";
+import { ToastContainer, toast } from "react-toastify";
 import {
   Button,
   Card,
@@ -11,35 +12,96 @@ import {
   Grid,
 } from "@mui/material";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
+import * as pdfjsLib from "pdfjs-dist/webpack";
 
 const UploadFile = () => {
   const [files, setFiles] = useState({
     aadhar: null,
     passport: null,
-    marksheet: null,
+    marksheet12th: null,
+    marksheet10th: null,
   });
   const [imagePreviews, setImagePreviews] = useState({
     aadhar: null,
     passport: null,
-    marksheet: null,
+    marksheet12th: null,
+    marksheet10th: null,
   });
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const steps = ["aadhar", "passport", "marksheet"];
+  const steps = ["aadhar", "passport", "marksheet12th", "marksheet10th"];
 
-  const handleFileChange = (e, type) => {
-    if (e.target.files) {
+  const handleFileChange = async (e, type) => {
+    if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+      const maxSize = 5 * 1024 * 1024;
+
+      if (!allowedTypes.includes(file.type)) {
+        toast.warning("Please upload a valid image or PDF file.", { position: "top-right" });
+        return;
+      }
+
+      if (file.size > maxSize) {
+        toast.warning("File size exceeds 5MB. Please upload a smaller file.", { position: "top-right" });
+        return;
+      }
+
       setFiles({ ...files, [type]: file });
-      setImagePreviews({
-        ...imagePreviews,
-        [type]: URL.createObjectURL(file),
-      });
+
+      if (file.type === "application/pdf") {
+        const firstPageImage = await renderPdfToImage(file);
+        setFiles((prevFiles) => ({
+          ...prevFiles,
+          [type]: firstPageImage,
+        }));
+        setImagePreviews({
+          ...imagePreviews,
+          [type]: firstPageImage,
+        });
+      } else {
+        setImagePreviews({
+          ...imagePreviews,
+          [type]: URL.createObjectURL(file),
+        });
+      }
     }
   };
 
+  const renderPdfToImage = (pdfFile) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const loadingTask = pdfjsLib.getDocument(reader.result);
+          const pdf = await loadingTask.promise;
+          const page = await pdf.getPage(1);
+          const viewport = page.getViewport({ scale: 1 });
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+  
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+  
+          await page.render({
+            canvasContext: context,
+            viewport: viewport,
+          }).promise;
+          const imageDataUrl = canvas.toDataURL();
+          resolve(imageDataUrl);
+        } catch (error) {
+          reject("Error rendering PDF page to image");
+        }
+      };
+  
+      reader.onerror = () => reject("Error reading PDF file");
+  
+      reader.readAsArrayBuffer(pdfFile);
+    });
+  };
+  
   const extractTextFromImage = async (file) => {
     if (!file) return "";
     try {
@@ -59,6 +121,7 @@ const UploadFile = () => {
     const extractedTexts = [];
 
     for (const key of Object.keys(files)) {
+      
       const extractedText = await extractTextFromImage(files[key]);
       extractedTexts.push({ type: key, text: extractedText });
     }
@@ -221,7 +284,7 @@ const UploadFile = () => {
                       steps[currentStep].slice(1)}
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/*, application/pdf"
                       onChange={(e) => handleFileChange(e, steps[currentStep])}
                       hidden
                     />
@@ -312,6 +375,7 @@ const UploadFile = () => {
           )}
         </Box>
       </Box>
+      <ToastContainer />
     </ThemeProvider>
   );
 };
