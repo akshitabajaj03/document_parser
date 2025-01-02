@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState,useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Tesseract from "tesseract.js";
 import { ToastContainer, toast } from "react-toastify";
@@ -13,6 +13,9 @@ import {
 } from "@mui/material";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import * as pdfjsLib from "pdfjs-dist/webpack";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const API_KEY = "AIzaSyDhQf6fSDIjAgZ5p5bgyCCU66owxFXr04s";
 
 const UploadFile = () => {
   const [files, setFiles] = useState({
@@ -28,9 +31,9 @@ const UploadFile = () => {
     marksheet10th: null,
   });
   const [currentStep, setCurrentStep] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [extr, setExtr] = useState({});
+  const [loading, setLoading] = useState(null);
   const navigate = useNavigate();
-
   const steps = ["aadhar", "passport", "marksheet12th", "marksheet10th"];
 
   const handleFileChange = async (e, type) => {
@@ -40,12 +43,16 @@ const UploadFile = () => {
       const maxSize = 5 * 1024 * 1024;
 
       if (!allowedTypes.includes(file.type)) {
-        toast.warning("Please upload a valid image or PDF file.", { position: "top-right" });
+        toast.warning("Please upload a valid image or PDF file.", {
+          position: "top-right",
+        });
         return;
       }
 
       if (file.size > maxSize) {
-        toast.warning("File size exceeds 5MB. Please upload a smaller file.", { position: "top-right" });
+        toast.warning("File size exceeds 5MB. Please upload a smaller file.", {
+          position: "top-right",
+        });
         return;
       }
 
@@ -81,10 +88,10 @@ const UploadFile = () => {
           const viewport = page.getViewport({ scale: 1 });
           const canvas = document.createElement("canvas");
           const context = canvas.getContext("2d");
-  
+
           canvas.height = viewport.height;
           canvas.width = viewport.width;
-  
+
           await page.render({
             canvasContext: context,
             viewport: viewport,
@@ -95,13 +102,44 @@ const UploadFile = () => {
           reject("Error rendering PDF page to image");
         }
       };
-  
+
       reader.onerror = () => reject("Error reading PDF file");
-  
+
       reader.readAsArrayBuffer(pdfFile);
     });
   };
-  
+
+  const funcgem = async (file, type) => {
+    const genAI = new GoogleGenerativeAI(API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    try {
+      const reader = new FileReader();
+
+      const fileReadPromise = new Promise((resolve, reject) => {
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = (error) => reject("Error reading file: " + error);
+      });
+
+      reader.readAsDataURL(file);
+      const base64Image = await fileReadPromise;
+
+      const imagePart = {
+        inlineData: {
+          data: base64Image.split(",")[1],
+          mimeType: file.type,
+        },
+      };
+
+      const prompt = "Get the text from this image";
+      const result = await model.generateContent([prompt, imagePart]);
+      const geminiText = result.response.text();
+      return geminiText;
+    } catch (error) {
+      console.error("Error processing the file with Gemini:", error);
+    }
+  };
+
   const extractTextFromImage = async (file) => {
     if (!file) return "";
     try {
@@ -119,16 +157,31 @@ const UploadFile = () => {
     setLoading(true);
 
     const extractedTexts = [];
+    let tempExtr = {};
 
     for (const key of Object.keys(files)) {
-      
       const extractedText = await extractTextFromImage(files[key]);
       extractedTexts.push({ type: key, text: extractedText });
     }
 
+    for (const key of Object.keys(files)) {
+      try {
+        const geminiText = await funcgem(files[key], key);
+        tempExtr[key] = geminiText;
+      } catch (err) {
+        console.log(err);
+      }
+    }
+    setExtr(tempExtr);
     setLoading(false);
-    navigate("/form", { state: { extractedTexts } });
   };
+
+  useEffect(() => {
+    if (Object.keys(extr).length > 0) {
+      // Now that extr is updated, navigate to the next page
+      navigate("/form", { state: { extractedTexts: extr } });
+    }
+  }, [extr]);
 
   const theme = createTheme({
     typography: {

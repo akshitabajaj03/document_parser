@@ -71,7 +71,6 @@ const tableDataStyle = {
   textAlign: "left",
 };
 
-
 export {
   outerStyle,
   buttonStyle,
@@ -83,3 +82,4 @@ export {
   tableHeadStyle,
   tableStyle,
 };
+

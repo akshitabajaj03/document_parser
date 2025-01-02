@@ -24,6 +24,10 @@ import "jspdf-autotable";
 const Form = () => {
   const location = useLocation();
   const { extractedTexts } = location.state || {};
+  const aadharText = extractedTexts.aadhar;
+  const passportText = extractedTexts.passport;
+  const marksheet12thText = extractedTexts.marksheet12th;
+  const marksheet10th = extractedTexts.marksheet10th;
   const [email, setEmail] = useState("");
   const [personalInfo, setPersonalInfo] = useState({
     name: "",
@@ -34,7 +38,8 @@ const Form = () => {
     gender: "",
     address: "",
   });
-  const [academicInfo, setAcademicInfo] = useState([]);
+  const [academicInfo12, setAcademicInfo12] = useState([]);
+  const [academicInfo10, setAcademicInfo10] = useState([]);
 
   const formatName = (name) => {
     if (!name) return "";
@@ -44,17 +49,20 @@ const Form = () => {
       .join(" ");
   };
 
-  const extractName = (name) => {
-    const match = name?.match(/To\s+(\S+\s+\S+)/i);
-    return match ? match[1] : null;
-  };
-
   const handlePersonalInfoChange = (field, value) => {
     setPersonalInfo((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleAcademicInfoChange = (index, field, value) => {
-    setAcademicInfo((prev) =>
+  const handleAcademicInfoChange12 = (index, field, value) => {
+    setAcademicInfo12((prev) =>
+      prev.map((item, idx) =>
+        idx === index ? { ...item, [field]: value } : item
+      )
+    );
+  };
+
+  const handleAcademicInfoChange10 = (index, field, value) => {
+    setAcademicInfo10((prev) =>
       prev.map((item, idx) =>
         idx === index ? { ...item, [field]: value } : item
       )
@@ -64,26 +72,28 @@ const Form = () => {
   useEffect(() => {
     document.body.style.fontFamily = 'Poppins, sans-serif';
     const ans = [];
-    ans[0] = extractDataFromAadhar(extractedTexts?.[0]?.text || "");
-    ans[1] = extractPassportData(JSON.stringify(extractedTexts?.[1] || {}));
-    ans[2] = extractSubjectsAndMarks(JSON.stringify(extractedTexts?.[2] || {}));
+    ans[0] = extractDataFromAadhar(aadharText);
+    ans[1] = extractPassportData(passportText);
+    ans[2] = extractSubjectsAndMarks(marksheet12thText);
+    ans[3] = extractSubjectsAndMarks(marksheet10th);
 
     setPersonalInfo((prev) => ({
       ...prev,
-      name: formatName(ans[1].passportName) || extractName(ans[0].name) || "",
+      name: formatName(ans[1].passportName) || "",
       mobileNumber: ans[0].mobileNumber || "",
       aadhaarNumber: ans[0].aadhaarNumber || "",
       dob:
         ans[0]?.dob?.length === 10
           ? ans[0].dob
-          : ans[1].passportDOB || ans[0]?.year || "",
+          : ans[1].passportDOB || ans[2].dateOfBirth || "",
       gender: ans[0].gender
         ? ans[0].gender.charAt(0).toUpperCase() + ans[0].gender.slice(1)
         : "",
       address: ans[0].address || "",
       passportNumber: ans[1].passportNumber || "",
     }));
-    setAcademicInfo(ans[2]);
+    setAcademicInfo12(ans[2].subjects);
+    setAcademicInfo10(ans[3].subjects);
   }, [extractedTexts]);
 
   const generatePDF = () => {
@@ -94,7 +104,8 @@ const Form = () => {
       !personalInfo.dob ||
       !personalInfo.address ||
       !personalInfo.gender ||
-      !academicInfo.length
+      !academicInfo12.length ||
+      !academicInfo10.length
     ) {
       toast.error("Please fill all the fields.");
       return;
@@ -144,6 +155,7 @@ const Form = () => {
     doc.line(10, 128, 200, 128);
 
     // Academic Table
+    doc.text("12th Marks", 14, 130);
     doc.autoTable({
       startY: 135,
       theme: "grid",
@@ -151,8 +163,21 @@ const Form = () => {
       headStyles: { fillColor: [0, 51, 102], textColor: [255, 255, 255] },
       alternateRowStyles: { fillColor: [240, 240, 240] },
       head: [["Subject", "Marks"]],
-      body: academicInfo.map((item) => [item.subject, item.marks]),
+      body: academicInfo12.map((item) => [item.subject, item.marks]),
     });
+
+    const firstTableHeight = doc.lastAutoTable.finalY + 10;
+    doc.text("10th Marks", 14, firstTableHeight + 10);
+    doc.autoTable({
+      startY: firstTableHeight,
+      theme: "grid",
+      styles: { font: "helvetica", fontSize: 10, textColor: [0, 0, 0] },
+      headStyles: { fillColor: [0, 51, 102], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [240, 240, 240] },
+      head: [["Subject", "Marks"]],
+      body: academicInfo10.map((item) => [item.subject, item.marks]),
+    });
+
 
     doc.save("Input_Details_Form.pdf");
   };
@@ -290,7 +315,7 @@ const Form = () => {
               </p>
             </div>
             <div style={innerGridStyle}>
-              <h3 style={{ color: "#003366" }}>Academic Information</h3>
+              <h3 style={{ color: "#003366" }}>12th Marks</h3>
               <table style={tableStyle}>
                 <thead>
                   <tr>
@@ -299,14 +324,14 @@ const Form = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {academicInfo.map((item, index) => (
+                  {academicInfo12.map((item, index) => (
                     <tr key={index}>
                       <td style={tableDataStyle}>
                         <input
                           type="text"
-                          value={item.subject}
+                          value={formatName(item.subjectName)}
                           onChange={(e) =>
-                            handleAcademicInfoChange(
+                            handleAcademicInfoChange12(
                               index,
                               "subject",
                               e.target.value
@@ -319,9 +344,9 @@ const Form = () => {
                       <td style={tableDataStyle}>
                         <input
                           type="number"
-                          value={item.marks}
+                          value={item.totalMarks}
                           onChange={(e) =>
-                            handleAcademicInfoChange(
+                            handleAcademicInfoChange12(
                               index,
                               "marks",
                               e.target.value

@@ -36,6 +36,9 @@ function extractDataFromAadhar(text) {
     regexAadhaarNumber = aadhaarMatches[0];
   }
 
+  const addressRegex = /Address:\s*(.*?)(?=\s*आधार|$)/s;
+  const address = text.match(addressRegex)?.[1]?.trim();
+
   return {
     year: regexYear,
     name: regexName,
@@ -43,10 +46,12 @@ function extractDataFromAadhar(text) {
     dob: regexDOB,
     mobileNumber: regexMobileNumber,
     aadhaarNumber: regexAadhaarNumber,
+    address:address,
   };
 }
 
 const extractPassportData = (text) => {
+  
   let passportNumber = null;
   let passportName = null;
   let passportDOB = null;
@@ -59,10 +64,8 @@ const extractPassportData = (text) => {
   const dobMatch = text?.match(/\b(\d{2}\/\d{2}\/\d{4})\b/);
   passportDOB = dobMatch ? dobMatch[1] : null;
 
-  const nameMatch = text.match(/<<([A-Z<\s]+)(?=\s|$)/);
-  if (nameMatch) {
-    passportName = nameMatch[1].replace(/<+/g, " ").trim();
-  }
+  const pattern = /Given\s+Name\(s\):\s*(.*)/;
+  passportName = (text.match(pattern))[1].replace(/\*\*/g, '').trim();;
 
   return {
     passportNumber: passportNumber,
@@ -72,24 +75,31 @@ const extractPassportData = (text) => {
 };
 
 const extractSubjectsAndMarks = (text) => {
-  const subjectRegex = /\s*([A-Za-z\s]+)\s+(\d{2})\s+[A-Za-z\s]+/g;
-  let subjectsAndMarks = [];
-  let match;
+  const dobPattern = /Date of Birth (\d{2}-\d{2}-\d{4})/;
+    const dobMatch = text.match(dobPattern);
+    const dateOfBirth = dobMatch ? dobMatch[1] : "Not Found";
 
-  while ((match = subjectRegex.exec(text)) !== null) {
-    subjectsAndMarks.push({
-      subject:
-        match[1].trim().slice(1).charAt(0).toUpperCase() +
-        match[1].trim().slice(2).toLowerCase(),
-      marks: match[2],
-    });
-  }
+    // Extract Subject and Total Marks
+    const subjectPattern = /\|\s+(\d{3})\s+\|\s+([\w\s&.\-]+)\s+\|\s+\d+\s+\|\s+\d+\s+\|\s+(\d+)\s+\|/g;
+    const subjects = [];
+    let match;
 
-  while (subjectsAndMarks.length < 5) {
-    subjectsAndMarks.push({ subject: "________________", marks: "____" });
-  }
+    while ((match = subjectPattern.exec(text)) !== null) {
+        const subjectName = match[2].trim();
+        const totalMarks = parseInt(match[3], 10);
 
-  return subjectsAndMarks.slice(0, 5);
+        subjects.push({
+            subjectName,
+            totalMarks,
+        });
+    }
+
+    // Ensure there are at least 5 subjects by adding placeholders
+    while (subjects.length < 5) {
+        subjects.push({ subjectName: "________________", totalMarks: "____" });
+    }
+
+    return { dateOfBirth, subjects: subjects.slice(0, 5) };
 };
 
 export { extractDataFromAadhar, extractPassportData, extractSubjectsAndMarks };
